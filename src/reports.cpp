@@ -114,6 +114,8 @@ std::string detectRub(const Journal& j) {
     std::set<std::string> used;
     for (const Transaction& t : j.transactions)
         for (const Posting& p : t.postings) used.insert(p.amount->commodity);
+    // Income may be only in dollars while rubles appear just in the rates.
+    for (const Price& p : j.prices) used.insert(p.to.commodity);
     for (const char* candidate : {"₽", "RUB", "руб", "руб.", "р."})
         if (used.count(candidate) > 0) return candidate;
     throw std::runtime_error("не нашёл в журнале рублей; укажите валюту так: --rub RUB");
