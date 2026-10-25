@@ -56,6 +56,14 @@ std::string leafName(const std::string& account) {
 
 Date lastDate(const Journal& j) { return j.transactions.empty() ? Date{} : j.transactions.back().date; }
 
+// Valuation without --to uses the freshest information in the journal,
+// which may be a rate written after the last transaction.
+Date valuationDate(const Journal& j) {
+    Date d = lastDate(j);
+    if (!j.prices.empty() && d < j.prices.back().date) d = j.prices.back().date;
+    return d;
+}
+
 enum class Align { Left, Right };
 
 // Columns are separated by three spaces; widths come from the content.
@@ -145,7 +153,7 @@ void balanceReport(const Journal& j, const ReportOptions& o, std::ostream& out) 
 
     if (o.valueIn) {
         const PriceDb prices(j);
-        const Date on = o.to ? *o.to : lastDate(j);
+        const Date on = o.to ? *o.to : valuationDate(j);
         for (auto& [account, m] : own) {
             MixedAmount valued;
             valued.add(prices.convert(m, *o.valueIn, on), *o.valueIn);

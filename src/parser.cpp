@@ -14,6 +14,8 @@ namespace {
 
 bool isDigit(char c) { return c >= '0' && c <= '9'; }
 
+const char* const kConversionAccount = "капитал:обмен";
+
 // Account and amount are separated by a tab or at least two spaces,
 // because account names themselves may contain single spaces.
 std::size_t findAccountEnd(std::string_view s) {
@@ -257,6 +259,7 @@ private:
         current_.reset();
         if (t.postings.empty()) throw JournalError(path_, t.line, "у операции нет ни одной проводки");
         balance(t);
+        addConversionPostings(t);
         t.order = journal_.transactions.size();
         journal_.transactions.push_back(std::move(t));
     }
@@ -301,6 +304,27 @@ private:
         }
         t.postings.erase(t.postings.begin() + static_cast<std::ptrdiff_t>(elided));
         t.postings.insert(t.postings.begin() + static_cast<std::ptrdiff_t>(elided), filled.begin(), filled.end());
+    }
+
+    // "-600 USD @ 92,40 ₽" balances by cost, but the raw amounts do not:
+    // dollars leave and rubles arrive. A trading account takes both sides,
+    // so every report totals to zero and, valued at today's rate, shows the
+    // exchange gain or loss.
+    static void addConversionPostings(Transaction& t) {
+        std::vector<Posting> conversions;
+        for (const Posting& p : t.postings) {
+            if (!p.cost) continue;
+            Posting out;
+            out.account = kConversionAccount;
+            out.line = p.line;
+            out.inferred = true;
+            Posting in = out;
+            out.amount = Amount{-p.amount->qty, p.amount->commodity};
+            in.amount = *p.cost;
+            conversions.push_back(std::move(out));
+            conversions.push_back(std::move(in));
+        }
+        t.postings.insert(t.postings.end(), conversions.begin(), conversions.end());
     }
 
     // Unit prices like "@ 96,4012 ₽" leave sub-kopeck remainders; anything

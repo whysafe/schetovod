@@ -115,6 +115,32 @@ TEST(Balance, ValuesForeignCurrencyAtReportDate) {
     EXPECT_NE(out.find("10 000 ₽    usd"), std::string::npos) << out;
 }
 
+TEST(Balance, CurrencyExchangeTotalsToZero) {
+    const Journal j = parse(R"(
+2026-09-20 Заказ
+    активы:payoneer    650 USD
+    доходы:игры
+
+2026-10-02 Вывод
+    активы:payoneer    -600 USD @ 92,40 ₽
+    активы:банк
+
+P 2026-11-01 USD 93,10 ₽
+)");
+    const std::string plain = balance(j, {});
+    EXPECT_NE(plain.find(" -55 440 ₽    обмен"), std::string::npos) << plain;
+    EXPECT_EQ(plain.substr(plain.size() - 3), " 0
+") << plain;
+
+    // At the later rate the trading account shows the exchange gain.
+    ReportOptions valued;
+    valued.valueIn = "₽";
+    const std::string out = balance(j, valued);
+    EXPECT_NE(out.find("420 ₽    обмен"), std::string::npos) << out;
+    EXPECT_EQ(out.substr(out.size() - 3), " 0
+") << out;
+}
+
 TEST(Register, RunningTotal) {
     ReportOptions o;
     o.queries = {"тинькофф"};
