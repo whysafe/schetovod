@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: gcc, os: ubuntu-latest, cxx: g++, werror: ON }
+          - { name: clang, os: ubuntu-latest, cxx: clang++, werror: ON }
+          - { name: msvc, os: windows-latest, cxx: "", werror: OFF }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.cxx }}" ]; then export CXX=${{ matrix.cxx }}; fi
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSCHETOVOD_WERROR=${{ matrix.werror }}
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Run on the example journal
+        shell: bash
+        run: |
+          bin=build/schetovod
+          [ -f build/Release/schetovod.exe ] && bin=build/Release/schetovod.exe
+          for cmd in check bal month npd; do
+            echo "\$ schetovod -f examples/frilans-2026.journal $cmd"
+            "$bin" -f examples/frilans-2026.journal $cmd
+            echo
+          done
+          "$bin" -f examples/frilans-2026.journal bal -X ₽ -d 2
+          "$bin" -f examples/frilans-2026.journal reg тинькофф --period 2026-10
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build with ASan and UBSan
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+          cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
